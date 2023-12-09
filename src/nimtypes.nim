@@ -67,12 +67,11 @@ proc prepare(ty: NimTy) =
     ty.rawSons.add newNimTy(skipped[1])
   of ntyArray:
     skipped.expectKind nnkBracketExpr
-    let t = newNimTy(tyArray)
     if inst[1].kind == nnkInfix:
-      t.rawSons.add newNimTy(tyRange, [], nnkRange.newTree(skipped[1][1], skipped[1][2]))
+      ty.rawSons.add newNimTy(tyRange, [], nnkRange.newTree(skipped[1][1], skipped[1][2]))
     else:
-      t.rawSons.add newNimTy(skipped[1])
-    ty.rawSons.add t
+      ty.rawSons.add newNimTy(skipped[1])
+    ty.rawSons.add newNimTy(skipped[2])
   of ntyTypeDesc:
     if inst.kind == nnkBracketExpr:
       ty.rawSons.add newNimTy(skipped[1])
