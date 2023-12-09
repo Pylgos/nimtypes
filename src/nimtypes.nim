@@ -13,13 +13,13 @@ type
     tyInt8, tyInt16, tyInt32, tyInt64,
     tyFloat, tyFloat32, tyFloat64, tyFloat128,
     tyUInt, tyUInt8, tyUInt16, tyUInt32, tyUInt64,
-    tyUnused0, tySink, tyLent
+    tyOwned, tySink, tyLent
     tyVarargs,
     tyUncheckedArray,
     tyError,
     tyBuiltitypeClass, tyUserTypeClass, tyUserTypeClassInst,
     tyCompositeTypeClass, tyInferred, tyAnd, tyOr, tyNot,
-    tyAnything, tyStatic, tyFromExpr, tyOptDeprecated, tyVoid,
+    tyAnything, tyStatic, tyFromExpr, tyConcept, tyVoid, tyIterable
 
   NimTy* = ref object
     ready: bool
@@ -57,14 +57,12 @@ proc prepare(ty: NimTy) =
   if ty.ready: return
   let inst = ty.origNode.getTypeInst()
   let skipped = inst.skipAlias()
+
   case inst.typeKind
   of ntyNone, ntyBool, ntyChar, ntyNil, ntyStmt, ntyVoid, ntyEmpty, ntyPointer, ntyString, ntyCString, ntyInt, ntyInt8, ntyInt16, ntyInt32, ntyInt64,
-     ntyUInt, ntyUInt8, ntyUInt32, ntyUInt64, ntyFloat, ntyFloat32, ntyFloat64, ntyFloat128,
-     ntyError, ntyGenericParam, ntyForward:
+     ntyUInt, ntyUInt8, ntyUInt16, ntyUInt32, ntyUInt64, ntyFloat, ntyFloat32, ntyFloat64, ntyFloat128,
+     ntyError, ntyGenericParam, ntyForward, ntyOrdinal, ntyUserTypeClass, ntyOptDeprecated, ntyStatic:
     discard
-  of ntyUncheckedArray:
-    skipped.expectKind nnkBracketExpr
-    ty.rawSons.add newNimTy(skipped[1])
   of ntyArray:
     skipped.expectKind nnkBracketExpr
     if inst[1].kind == nnkInfix:
@@ -126,6 +124,10 @@ proc prepare(ty: NimTy) =
         ty.rawSons.add newNimTy(s[1])
   of ntyPtr, ntyRef, ntyVar:
     ty.rawSons.add newNimTy(skipped[0])
+  of ntyUnused0:
+    skipped.expectKind nnkBracketExpr
+    doAssert skipped[0].strVal == "owned"
+    ty.rawSons.add newNimTy(skipped[1])
   of ntyUnused1:
     skipped.expectKind nnkBracketExpr
     doAssert skipped[0].strVal == "sink"
@@ -134,12 +136,34 @@ proc prepare(ty: NimTy) =
     skipped.expectKind nnkBracketExpr
     doAssert skipped[0].strVal == "lent"
     ty.rawSons.add newNimTy(skipped[1])
-  of ntySequence:
+  of ntySequence, ntyOpenArray, ntyUncheckedArray, ntySet, ntyVarargs:
     skipped.expectKind nnkBracketExpr
     ty.rawSons.add newNimTy(skipped[1])
   of ntyDistinct:
     skipped.expectKind nnkDistinctTy
     ty.rawSons.add newNimTy(skipped[0])
+  of ntyRange:
+    skipped.expectKind nnkBracketExpr
+    ty.rawNode = skipped[1]
+  of ntyProc:
+    skipped.expectKind nnkProcTy
+    ty.rawNode = skipped
+    let fp = skipped[0]
+    if fp[0].kind == nnkEmpty:
+      ty.rawSons.add newNimTy(tyEmpty)
+    else:
+      ty.rawSons.add newNimTy(fp[0])
+    for i in 1..<fp.len:
+      ty.rawSons.add newNimTy(fp[i][1])
+  of ntyOr, ntyAnd:
+    skipped.expectKind nnkBracketExpr
+    ty.rawSons.add newNimTy(skipped[1])
+    ty.rawSons.add newNimTy(skipped[2])
+  of ntyNot:
+    skipped.expectKind nnkBracketExpr
+    ty.rawSons.add newNimTy(skipped[1])
+  elif inst.typeKind.int == 64:
+    ty.rawSons.add newNimTy(skipped[1])
   else:
     raiseAssert repr inst.typeKind
   ty.ready = true
@@ -178,7 +202,7 @@ proc getNimTy*(node: NimNode): NimTy =
 proc treeReprImpl(nty: NimTy, res: var string, depth: int) =
   res.add indent($nty.kind, depth * 2)
   res.add ": "
-  res.add nty.rawNode.repr.replace("\n", "; ")
+  res.add nty.n.repr.replace("\n", "; ")
   res.add "\n"
   for son in nty:
     treeReprImpl(son, res, depth + 1)

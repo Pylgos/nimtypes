@@ -52,6 +52,32 @@ test "getNimTy":
   var j: MyEnum
   test(j)
 
+  var k: range[0..123]
+  test(k)
+
+  test(Ordinal)
+
+  test(proc(a: int, b: string): char)
+
+  type L = int or (float and not bool)
+  test(L)
+
+  type M = concept x
+    $x is string
+  test(M)
+
+  type N = concept
+    proc `$`(x: Self): string
+  test(N)
+
+  test(iterable[string])
+
+  test({true, false})
+
+  test(static int)
+
+  test(owned int)
+
 test "toTypedesc":
   macro test1(val: typed): untyped =
     let ty = getNimTy(val)
