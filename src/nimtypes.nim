@@ -177,7 +177,7 @@ iterator items*(nty: NimTy): NimTy =
     n.prepare()
     yield n
 
-proc `[]`*(nty: NimTy, idx: int): NimTy =
+proc `[]`*(nty: NimTy, idx: int | BackwardsIndex): NimTy =
   nty.prepare()
   nty.rawSons[idx]
 
@@ -221,3 +221,14 @@ proc treeReprImpl(nty: NimTy, res: var string, depth: int) =
 
 proc treeRepr*(nty: NimTy): string =
   treeReprImpl(nty, result, 0)
+
+proc lastSon*(nty: NimTy): NimTy =
+  nty.prepare()
+  nty.rawSons[^1]
+
+proc skipTypes*(t: NimTy, kinds: set[NimTyKind]): NimTy =
+  result = t
+  while result.kind in kinds: result = lastSon(result)
+
+macro dumpTypeTree*(t: typed) =
+  echo treeRepr t.getNimTy()

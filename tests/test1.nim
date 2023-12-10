@@ -1,5 +1,4 @@
-import unittest
-
+import std/[unittest, macros]
 import nimtypes
 
 test "getNimTy":
@@ -78,6 +77,10 @@ test "getNimTy":
 
   test(owned int)
 
+  type O[x: static int] = object
+  var o: O[1]
+  test(o)
+
 test "toTypedesc":
   macro test1(val: typed): untyped =
     let ty = getNimTy(val)
@@ -111,11 +114,34 @@ test "recursive object":
   
   test(A)
 
-test "static generics":
-  macro test(val: typed): untyped =
-    let ty = getNimTy(val)
+test "skip types":
+  macro testSkip(a: typed, b: typed, kinds: static set[NimTyKind]): untyped =
+    let skippedA = a.getNimTy().skipTypes(kinds)
+    let skippedB = b.getNimTy().skipTypes(kinds)
+    echo treeRepr skippedA
+    echo treeRepr skippedB
+    sameType(skippedA, skippedB).newLit
+
+  type Gnrc[T] = object
+  var intVal: int
+  var gnrcIntVal: Gnrc[int]
+
+  check testSkip(var int, int, {tyTypeDesc, tyVar})
+  check testSkip(int, intVal, {tyTypeDesc})
+  check not testSkip(var int, intVal, {tyTypeDesc})
+  check testSkip(var int, intVal, {tyTypeDesc, tyVar})
+  check not testSkip(intVal, strVal, {})
+  check not testSkip(gnrcIntVal, Gnrc, {tyTypeDesc})
+  check testSkip(gnrcIntVal, Gnrc[int], {tyTypeDesc})
+
+test "generic type equality":
+  type
+    Gnrc[T] = object
+
+  macro test(n: typed): untyped =
+    let ty = n.getNimTy()
+    echo repr ty[0][0].typeNode
     echo treeRepr ty
-  
-  type A[x: static int] = object
-  var a: A[1]
-  test(a)
+    newLit sameType(ty[0][0], bindSym"Gnrc")
+
+  check test(Gnrc[int])
