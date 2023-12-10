@@ -24,25 +24,25 @@ type
   NimTy* = ref object
     ready: bool
     kind: NimTyKind
-    origNode: NimNode
+    typeNode: NimNode
+    implNode: NimNode
     rawSons: seq[NimTy]
-    rawNode: NimNode
 
 proc toNimTyKind(kind: NimTypeKind): NimTyKind =
   NimTyKind(int(kind))
 
-proc newNimTy(origNode: NimNode): NimTy =
-  let inst = origNode.getTypeInst()
+proc newNimTy(typeNode: NimNode): NimTy =
+  let inst = typeNode.getTypeInst()
   NimTy(
     kind: inst.typeKind.toNimTyKind(),
-    origNode: origNode,
+    typeNode: typeNode,
   )
 
 proc newNimTy(kind: NimTyKind, sons: openArray[NimTy] = [], n: NimNode = nil): NimTy =
   NimTy(
     kind: kind,
     rawSons: @sons,
-    rawNode: n,
+    implNode: n,
   )
 
 proc skipAlias(n: NimNode): NimNode =
@@ -53,9 +53,9 @@ proc skipAlias(n: NimNode): NimNode =
 
 proc prepare(ty: NimTy) =
   if ty == nil: return
-  if ty.origNode == nil: return
+  if ty.typeNode == nil: return
   if ty.ready: return
-  let inst = ty.origNode.getTypeInst()
+  let inst = ty.typeNode.getTypeInst()
   let skipped = inst.skipAlias()
 
   case inst.typeKind
@@ -88,7 +88,7 @@ proc prepare(ty: NimTy) =
     of nnkObjectTy:
       son = newNimTy(tyObject)
       skipped.expectKind nnkObjectTy
-      son.rawNode = ty.origNode.getImpl()
+      son.implNode = ty.typeNode.getImpl()
       if skipped[1].kind == nnkEmpty:
         son.rawSons.add newNimTy(tyEmpty)
       else:
@@ -103,7 +103,7 @@ proc prepare(ty: NimTy) =
     ty.rawSons.add son
   of ntyObject:
     skipped.expectKind nnkObjectTy
-    ty.rawNode = ty.origNode.getImpl()
+    ty.implNode = ty.typeNode.getImpl()
     if skipped[1].kind == nnkEmpty:
       ty.rawSons.add newNimTy(tyEmpty)
     else:
@@ -111,9 +111,9 @@ proc prepare(ty: NimTy) =
       ty.rawSons.add newNimTy(skipped[1][0])
   of ntyEnum:
     skipped.expectKind nnkEnumTy
-    ty.rawNode = skipped
+    ty.implNode = skipped
   of ntyTuple:
-    ty.rawNode = skipped
+    ty.implNode = skipped
     if skipped.kind == nnkTupleConstr:
       for s in skipped:
         ty.rawSons.add newNimTy(s)
@@ -144,10 +144,10 @@ proc prepare(ty: NimTy) =
     ty.rawSons.add newNimTy(skipped[0])
   of ntyRange:
     skipped.expectKind nnkBracketExpr
-    ty.rawNode = skipped[1]
+    ty.implNode = skipped[1]
   of ntyProc:
     skipped.expectKind nnkProcTy
-    ty.rawNode = skipped
+    ty.implNode = skipped
     let fp = skipped[0]
     if fp[0].kind == nnkEmpty:
       ty.rawSons.add newNimTy(tyEmpty)
@@ -189,12 +189,24 @@ proc len*(nty: NimTy): int =
   nty.prepare()
   nty.rawSons.len
 
-proc n*(nty: NimTy): NimNode =
+proc sameType*(a, b: NimTy): bool =
+  sameType(a.typeNode, b.typeNode)
+
+proc sameType*(a: NimTy, b: NimNode): bool =
+  sameType(a.typeNode, b)
+
+proc sameType*(a: NimNode, b: NimTy): bool =
+  sameType(a, b.typeNode)
+
+proc implNode*(nty: NimTy): NimNode =
   nty.prepare()
-  nty.rawNode
+  nty.implNode
+
+proc typeNode*(nty: NimTy): NimNode =
+  nty.typeNode
 
 proc toTypedesc*(nty: NimTy): NimNode =
-  newCall(bindSym"typeof", nty.origNode)
+  newCall(bindSym"typeof", nty.typeNode)
 
 proc getNimTy*(node: NimNode): NimTy =
   newNimTy(node)
@@ -202,7 +214,7 @@ proc getNimTy*(node: NimNode): NimTy =
 proc treeReprImpl(nty: NimTy, res: var string, depth: int) =
   res.add indent($nty.kind, depth * 2)
   res.add ": "
-  res.add nty.n.repr.replace("\n", "; ")
+  res.add nty.implNode.repr.replace("\n", "; ")
   res.add "\n"
   for son in nty:
     treeReprImpl(son, res, depth + 1)
