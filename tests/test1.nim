@@ -100,6 +100,9 @@ test "toTypedesc":
 
   var c: (string, char)
   check test2(c) is char
+  
+  var d: test1(c)
+  check d is (string, char)
 
 test "recursive object":
   macro test(val: typed): untyped =

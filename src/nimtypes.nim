@@ -94,13 +94,15 @@ proc prepare(ty: NimTy) =
       else:
         skipped[1].expectKind nnkOfInherit
         son.rawSons.add newNimTy(skipped[1][0])
+      ty.rawSons.add son
     of nnkDistinctTy:
       son = newNimTy(tyDistinct)
       skipped.expectKind nnkDistinctTy
       son.rawSons.add newNimTy(skipped[0])
+      ty.rawSons.add son
     else:
-      raiseAssert $skipped.kind
-    ty.rawSons.add son
+      for n in skipped:
+        ty.rawSons.add newNimTy(n)
   of ntyObject:
     skipped.expectKind nnkObjectTy
     ty.implNode = ty.typeNode.getImpl()
@@ -206,7 +208,10 @@ proc typeNode*(nty: NimTy): NimNode =
   nty.typeNode
 
 proc toTypedesc*(nty: NimTy): NimNode =
-  newCall(bindSym"typeof", nty.typeNode)
+  if nty.typeNode.kind == nnkSym and nty.typeNode.symKind == nskType:
+    nty.typeNode
+  else:
+    newCall(bindSym"typeof", nty.typeNode)
 
 proc getNimTy*(node: NimNode): NimTy =
   newNimTy(node)
